@@ -1,0 +1,125 @@
+# spark ML
+import re
+import os
+from collections import Counter
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+plt.style.use('seaborn')
+%matplotlib inline
+
+DATA_DIR = os.path.join(".","data")
+
+# initiate Spark virtual environment
+import pyspark as ps
+
+spark = ps.sql.SparkSession.builder \
+            .master("local[4]") \
+            .appName("spark-ml-examples") \
+            .getOrCreate()
+
+sc = spark.sparkContext
+
+# ways to create Spark DataFrame
+def casting_function(args):
+    user_id, date, num_streams, country, invoice_item = args
+    return((int(user_id), date, int(num_streams), country, int(invoice_item)))
+
+rdd_aavail = sc.textFile(os.path.join(DATA_DIR, 'example-data.csv'))\
+                         .map(lambda rowstr : rowstr.split(","))\
+                         .filter(lambda row: not row[0].startswith('#'))\
+                         .map(casting_function)
+
+rdd_aavail.collect()
+
+# create a schema 
+from pyspark.sql.types import *
+
+schema = StructType([
+    StructField('user_id', IntegerType(), True),
+    StructField('date', StringType(), True),
+    StructField('num_streams', IntegerType(), True),
+    StructField('country', StringType(), True),
+    StructField('invoice_items', IntegerType(), True) ])
+    
+# feed that into a DataFrame
+df = spark.createDataFrame(rdd_aavail, schema)
+
+# show the result
+df.show()
+
+# print the schema
+df.printSchema()  
+
+# read CSV
+df = spark.read.csv(os.path.join(DATA_DIR, 'example-data.csv'),
+                         header=True,       # use headers or not
+                         quote='"',         # char for quotes
+                         sep=",",           # char for separation
+                         inferSchema=True)  # do we infer schema or not ?
+
+
+# some functions are still valid
+print("line count: {}".format(df.count()))
+
+# show the table in a nice format
+df.show()
+
+'''
+ Here are some common operations that you might perform on a DataFrame
+'''
+# prints the schema
+df.printSchema()
+
+# turn the dataframe into panda DataFrame
+df.toPandas()
+
+# prints the schema
+print("--- printSchema()")
+df.printSchema()
+
+# prints the table itself
+print("--- show()")
+df.show()
+
+# show the statistics of all numerical columns
+print("--- describe()")
+df.describe().show()
+
+# show the statistics of one specific column
+print("--- describe(Amount)")
+df.describe("num_streams").show()
+
+## Setup the pipeline and train the model
+## run the whole pipeline
+pipe = Pipeline(stages=indexers+encoders+[va, ss, assembler, gbt])
+result = pipe.fit(df_aavail, paramMap).transform(df_aavail)
+result.select("features", "is_subscriber", "rawPrediction", "probability", "prediction").show()
+
+
+# The procedure with a train-test split, cross-validations and grid-search
+from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
+from pyspark.ml.evaluation import BinaryClassificationEvaluator
+
+train, test = df_aavail.randomSplit([0.8, 0.2], seed=42)
+
+gbt = GBTClassifier(labelCol="is_subscriber", featuresCol="features")
+paramGrid = ParamGridBuilder() \
+    .addGrid(gbt.maxIter, [10, 20]) \
+    .addGrid(gbt.stepSize, [0.01, 0.1]) \
+    .build()
+
+pipe = Pipeline(stages=indexers+encoders+[va, ss, assembler])
+pipeline_model = pipe.fit(train)
+prepped_train = pipeline_model.transform(train)
+prepped_test = pipeline_model.transform(test)
+
+crossval = CrossValidator(estimator=gbt,
+                          estimatorParamMaps=paramGrid,
+                          evaluator=BinaryClassificationEvaluator(labelCol="is_subscriber"),
+                          numFolds=3)
+
+# Run cross-validation, and choose the best set of parameters.
+cvModel = crossval.fit(prepped_train)
+print("model trained")
