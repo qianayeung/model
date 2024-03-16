@@ -1,0 +1,117 @@
+![ibm-cloud.png](attachment:ibm-cloud.png)
+## CASE STUDY - Deploying a recommender
+# downloaded ml-latest-small-zip and moved it to the data folder of the corresponding directory
+
+import os
+import shutil
+import pandas as pd
+import numpy as np
+import pyspark as ps
+from pyspark.ml import Pipeline
+from pyspark.sql import Row
+from pyspark.sql.types import DoubleType
+
+DATA_DIR = os.path.join("..", "data")
+SAVE_DIR = os.path.join("..", "saved-recommender")
+
+if os.path.isdir(SAVE_DIR):
+    shutil.rmtree(SAVE_DIR)
+
+## ensure the spark context is available
+spark = (ps.sql.SparkSession.builder
+        .appName("sandbox")
+        .getOrCreate()
+        )
+
+sc = spark.sparkContext
+print(spark.version) 
+
+### Ensure the data are downloaded, unziped and placed in the data folder of this lab.
+
+The data can be downloaded <a href="https://grouplens.org/datasets/movielens/">here</a>. We recommend you to download the small version: <b>ml-latest-small.zip</b>
+
+# terminal run
+movielens_data_dir = os.path.join(DATA_DIR, "ml-latest-small")        
+if not os.path.exists(movielens_data_dir):
+    print("ERROR make sure the path to the Movie Lens data is correct")
+# ERROR make sure the path to the Movie Lens data is correct
+
+## load the movies data as a pyspark dataframe
+movies_file = os.path.join(movielens_data_dir, "movies.csv") 
+movies_df = spark.read.format("csv").options(header="true", inferSchema="true").load(movies_file)
+movies_df = movies_df.withColumnRenamed("movieID", "movie_id")
+movies_df.show(n=4)
+
+## QUESTION 1 
+Explore the movie lens data a little and summarise it.
+
+## my code
+df.describe().show()
+print('Unique users: {}'.format(df.select('user_id').distinct().count()))
+print('Unique movies: {}'.format(df.select('movie_id').distinct().count()))
+print('Movies with Rating > 2: {}'.format(df.filter('rating > 2').select('movie_id').distinct().count()))
+print('Movies with Rating > 3: {}'.format(df.filter('rating > 3').select('movie_id').distinct().count()))
+print('Movies with Rating > 4: {}'.format(df.filter('rating > 4').select('movie_id').distinct().count()))
+
+
+# user data
++-------+------------------+----------------+------------------+--------------------+
+|summary|           user_id|        movie_id|            rating|           timestamp|
++-------+------------------+----------------+------------------+--------------------+
+|  count|            100836|          100836|            100836|              100836|
+|   mean|326.12756356856676|19435.2957177992| 3.501556983616962|1.2059460873684695E9|
+| stddev| 182.6184914635004|35530.9871987003|1.0425292390606342|2.1626103599513078E8|
+|    min|                 1|               1|               0.5|           828124615|
+|    max|               610|          193609|               5.0|          1537799250|
++-------+------------------+----------------+------------------+--------------------+
+
+Unique users: 610
+Unique movies: 9724
+Movies with Rating > 2: 8852
+Movies with Rating > 3: 7363
+Movies with Rating > 4: 4056
+
+## QUESTION 2
+
+Find the ten most popular movies. 
+
+1. Create 2 pyspark dataframes: one with the count of each film in df and one with the average rating of each movie in df.
+2. Join these two dataframes in a third dataframe. Then, filter this dataframe to select only the movies that have been seen more than 100 times.
+3. Use the movies_df dataframe to add the names of each movies on the dataframe created in 2. Then, order the dataframe by descending average rating.
+
++--------+-----------------+-----+--------------------+--------------------+
+|movie_id|      avg(rating)|count|               title|              genres|
++--------+-----------------+-----+--------------------+--------------------+
+|     318|4.429022082018927|  317|Shawshank Redempt...|         Crime|Drama|
+|     858|        4.2890625|  192|Godfather, The (1...|         Crime|Drama|
+|    2959|4.272935779816514|  218|   Fight Club (1999)|Action|Crime|Dram...|
+|    1221| 4.25968992248062|  129|Godfather: Part I...|         Crime|Drama|
+|   48516|4.252336448598131|  107|Departed, The (2006)|Crime|Drama|Thriller|
+|    1213|             4.25|  126|   Goodfellas (1990)|         Crime|Drama|
+|   58559|4.238255033557047|  149|Dark Knight, The ...|Action|Crime|Dram...|
+|      50|4.237745098039215|  204|Usual Suspects, T...|Crime|Mystery|Thr...|
+|    1197|4.232394366197183|  142|Princess Bride, T...|Action|Adventure|...|
+|     260|4.231075697211155|  251|Star Wars: Episod...|Action|Adventure|...|
++--------+-----------------+-----+--------------------+--------------------+
+only showing top 10 rows
+
+## my code
+## 1_
+movie_counts = df.groupby("movie_id").count()
+top_rated = df.groupby.avg("rating")
+# groupby() allows us to split data into separate groups to perform computations for better analysis. 
+
+## 2_
+top_movies = top_rated.join(movie_counts,on='movie_id').filter('count > 100')
+
+## 3_
+top_movies = top_movies.join(movies_df, on='movie_id').orderby('avg(rating)', ascending=False)
+
+# displaying the DataFrame
+print(top_movies)
+
+
+top_movies.show(10)
+
+
+
